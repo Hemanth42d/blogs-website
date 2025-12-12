@@ -3,12 +3,28 @@ import BlogCard from "../components/BlogCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 const BlogList = () => {
-  const { blogs, loading } = useBlog();
+  const { blogs, loading, error } = useBlog();
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-blue-600 hover:underline"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
@@ -23,8 +39,7 @@ const BlogList = () => {
               All Blog Posts
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Thoughts, tutorials, and insights on software development, clean
-              code, and building great products.
+              Everything I've learned and documented — from tech to life lessons.
             </p>
           </div>
         </div>
@@ -66,7 +81,7 @@ const BlogList = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {blogs.map((blog) => (
-                  <BlogCard key={blog.id} blog={blog} />
+                  <BlogCard key={blog._id} blog={blog} />
                 ))}
               </div>
             </>

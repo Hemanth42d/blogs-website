@@ -10,7 +10,7 @@ const BlogCard = ({ blog, showFeaturedBadge = false }) => {
     publishedAt,
     readTime,
     featured,
-  } = blog;
+  } = blog || {};
 
   return (
     <article className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow duration-200 overflow-hidden group">

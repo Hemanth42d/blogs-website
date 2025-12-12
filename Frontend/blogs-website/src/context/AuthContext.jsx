@@ -1,15 +1,8 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { authAPI } from "../utils/api";
 
-// Create context
 const AuthContext = createContext();
 
-// Mock admin credentials
-const ADMIN_CREDENTIALS = {
-  email: "admin@mvhemanth.me",
-  password: "admin123",
-};
-
-// Context provider component
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -17,48 +10,46 @@ export function AuthProvider({ children }) {
 
   // Check authentication status on mount
   useEffect(() => {
-    const savedAuth = localStorage.getItem("isAdmin");
-    const savedUser = localStorage.getItem("adminUser");
-
-    if (savedAuth === "true" && savedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+    checkAuth();
   }, []);
 
-  const login = (email, password) => {
-    // TODO: Replace with real backend login API
-    if (
-      email === ADMIN_CREDENTIALS.email &&
-      password === ADMIN_CREDENTIALS.password
-    ) {
-      const userData = {
-        email: email,
-        role: "admin",
-        loginTime: new Date().toISOString(),
-      };
+  const checkAuth = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
+    try {
+      const data = await authAPI.getMe();
       setIsAuthenticated(true);
-      setUser(userData);
-      localStorage.setItem("isAdmin", "true");
-      localStorage.setItem("adminUser", JSON.stringify(userData));
+      setUser(data.user);
+    } catch (error) {
+      // Token invalid or expired
+      localStorage.removeItem("token");
+      setIsAuthenticated(false);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const login = async (email, password) => {
+    try {
+      const data = await authAPI.login(email, password);
+      localStorage.setItem("token", data.token);
+      setIsAuthenticated(true);
+      setUser(data.user);
       return { success: true };
-    } else {
-      return {
-        success: false,
-        error: "Invalid email or password",
-      };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   };
 
   const logout = () => {
+    localStorage.removeItem("token");
     setIsAuthenticated(false);
     setUser(null);
-    localStorage.removeItem("isAdmin");
-    localStorage.removeItem("adminUser");
-    // TODO: Call backend API to invalidate session
   };
 
   const value = {
@@ -72,7 +63,6 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Custom hook to use the auth context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

@@ -6,12 +6,12 @@ import { AuthProvider } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
+import YouTubeBanner from "./components/YouTubeBanner";
 
 // Public Pages
 import Home from "./pages/Home";
 import BlogList from "./pages/BlogList";
 import BlogDetail from "./pages/BlogDetail";
-import Newsletter from "./pages/Newsletter";
 
 // Admin Pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -24,6 +24,7 @@ function App() {
       <AuthProvider>
         <BlogProvider>
           <div className="min-h-screen flex flex-col bg-gray-50">
+            <YouTubeBanner />
             <Navbar />
             <main className="grow">
               <Routes>
@@ -31,7 +32,6 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/blog" element={<BlogList />} />
                 <Route path="/blog/:slug" element={<BlogDetail />} />
-                <Route path="/newsletter" element={<Newsletter />} />
 
                 {/* Admin Routes */}
                 <Route path="/admin/login" element={<AdminLogin />} />

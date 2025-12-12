@@ -1,44 +1,22 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useBlog } from "../context/BlogContext";
 import BlogCard from "../components/BlogCard";
 import Button from "../components/Button";
-import Input from "../components/Input";
-import { isValidEmail } from "../utils/helpers";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 const Home = () => {
-  const { getFeaturedBlogs, getLatestBlogs } = useBlog();
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { getFeaturedBlogs, getLatestBlogs, loading } = useBlog();
 
   const featuredBlogs = getFeaturedBlogs();
   const latestBlogs = getLatestBlogs(4);
 
-  const handleNewsletterSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!email) {
-      setError("Please enter your email address");
-      return;
-    }
-
-    if (!isValidEmail(email)) {
-      setError("Please enter a valid email address");
-      return;
-    }
-
-    setLoading(true);
-
-    // TODO: Call backend API to subscribe email
-    setTimeout(() => {
-      setLoading(false);
-      setSubscribed(true);
-      setEmail("");
-    }, 1000);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -50,32 +28,31 @@ const Home = () => {
               Hi, I'm <span className="text-blue-600">Hemanth</span>
             </h1>
             <p className="text-xl lg:text-2xl text-gray-600 mb-8 leading-relaxed">
-              I write about software development, clean code practices, and
-              building products that people love. Welcome to my corner of the
-              internet.
+              A curious student documenting my learning journey. I write about 
+              the topics I explore, the skills I'm building, and the lessons 
+              I pick up along the way. Welcome to my digital notebook.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
                 size="lg"
                 onClick={() =>
-                  document
-                    .getElementById("featured-posts")
-                    .scrollIntoView({ behavior: "smooth" })
+                  document.getElementById("featured-posts").scrollIntoView({ behavior: "smooth" })
                 }
               >
                 Read My Blog
               </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() =>
-                  document
-                    .getElementById("newsletter")
-                    .scrollIntoView({ behavior: "smooth" })
-                }
+              <a
+                href="https://www.youtube.com/@HemanthCodeHub"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                Subscribe to Newsletter
-              </Button>
+                <Button variant="outline" size="lg" className="w-full">
+                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                  YouTube Channel
+                </Button>
+              </a>
             </div>
           </div>
         </div>
@@ -89,16 +66,19 @@ const Home = () => {
               Featured Posts
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Some of my most popular articles on software development and best
-              practices.
+              Highlights from my learning journey — topics that taught me the most.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-            {featuredBlogs.map((blog) => (
-              <BlogCard key={blog.id} blog={blog} showFeaturedBadge={true} />
-            ))}
-          </div>
+          {featuredBlogs.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+              {featuredBlogs.map((blog) => (
+                <BlogCard key={blog._id} blog={blog} showFeaturedBadge={true} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 mb-12">No featured posts yet.</p>
+          )}
 
           <div className="text-center">
             <Link to="/blog">
@@ -110,88 +90,27 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Newsletter Section */}
-      <section id="newsletter" className="bg-white py-16 lg:py-24">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
-            Stay Updated
-          </h2>
-          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-            Get notified when I publish new articles. No spam, unsubscribe at
-            any time.
-          </p>
-
-          {subscribed ? (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-6 max-w-md mx-auto">
-              <div className="flex items-center justify-center mb-3">
-                <svg
-                  className="h-8 w-8 text-green-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-green-900 mb-2">
-                Successfully Subscribed!
-              </h3>
-              <p className="text-sm text-green-700">
-                Thank you for subscribing to my newsletter. You'll receive
-                updates about new posts.
-              </p>
-            </div>
-          ) : (
-            <form
-              onSubmit={handleNewsletterSubmit}
-              className="max-w-md mx-auto"
-            >
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <Input
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    error={error}
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  size="lg"
-                  disabled={loading}
-                  className="sm:w-auto"
-                >
-                  {loading ? "Subscribing..." : "Subscribe"}
-                </Button>
-              </div>
-            </form>
-          )}
-        </div>
-      </section>
-
       {/* Latest Posts */}
-      <section className="py-16 lg:py-24">
+      <section className="py-16 lg:py-24 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
               Latest Posts
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Recent articles and thoughts on software development.
+              Fresh notes from what I've been learning recently.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {latestBlogs.map((blog) => (
-              <BlogCard key={blog.id} blog={blog} />
-            ))}
-          </div>
+          {latestBlogs.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {latestBlogs.map((blog) => (
+                <BlogCard key={blog._id} blog={blog} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">No posts yet.</p>
+          )}
         </div>
       </section>
     </div>

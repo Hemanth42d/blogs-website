@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect } from "react";
-import Button from "./Button";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Modal from "./Modal";
 
 const RichTextEditor = ({
@@ -8,69 +7,86 @@ const RichTextEditor = ({
   placeholder = "Start writing...",
 }) => {
   const editorRef = useRef(null);
-  const [selectedText, setSelectedText] = useState("");
   const [wordCount, setWordCount] = useState(0);
+  const isInternalChange = useRef(false);
+  const savedRange = useRef(null);
 
-  // Initialize word count on component mount and value changes
-  useEffect(() => {
-    if (editorRef.current) {
-      const textContent =
-        editorRef.current.textContent || editorRef.current.innerText || "";
-      const words = textContent
-        .trim()
-        .split(/\s+/)
-        .filter((word) => word.length > 0);
-      setWordCount(textContent.trim() ? words.length : 0);
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      savedRange.current = selection.getRangeAt(0).cloneRange();
     }
+  };
+
+  const restoreSelection = () => {
+    if (savedRange.current && editorRef.current) {
+      editorRef.current.focus();
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(savedRange.current);
+    }
+  };
+
+  useEffect(() => {
+    if (editorRef.current && !isInternalChange.current) {
+      if (editorRef.current.innerHTML !== value) {
+        editorRef.current.innerHTML = value || '';
+      }
+    }
+    isInternalChange.current = false;
+    
+    const textContent = editorRef.current?.textContent || '';
+    const words = textContent.trim().split(/\s+/).filter((word) => word.length > 0);
+    setWordCount(textContent.trim() ? words.length : 0);
   }, [value]);
 
-  // Format text functions
-  const execCommand = (command, value = null) => {
-    document.execCommand(command, false, value);
+  const execCommand = (command, cmdValue = null) => {
     editorRef.current?.focus();
-    // Trigger onChange to update parent state
+    document.execCommand(command, false, cmdValue);
     setTimeout(() => {
+      isInternalChange.current = true;
       const content = editorRef.current?.innerHTML || "";
       onChange(content);
     }, 0);
   };
 
-  const handleInput = (e) => {
+  const insertHTML = (html) => {
+    restoreSelection();
+    document.execCommand("insertHTML", false, html);
+    setTimeout(() => {
+      isInternalChange.current = true;
+      onChange(editorRef.current?.innerHTML || "");
+    }, 0);
+  };
+
+  const handleInput = useCallback((e) => {
+    isInternalChange.current = true;
     const content = e.target.innerHTML;
     onChange(content);
 
-    // Update word count
-    const textContent = e.target.textContent || e.target.innerText || "";
-    const words = textContent
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0);
-    setWordCount(words.length);
-  };
-  const handleSelection = () => {
-    const selection = window.getSelection();
-    setSelectedText(selection.toString());
-  };
+    const textContent = e.target.textContent || "";
+    const words = textContent.trim().split(/\s+/).filter((word) => word.length > 0);
+    setWordCount(textContent.trim() ? words.length : 0);
+  }, [onChange]);
 
   const handleKeyDown = (e) => {
-    // Handle keyboard shortcuts
     if (e.ctrlKey || e.metaKey) {
       switch (e.key) {
-        case "k": // Ctrl/Cmd + K for link
+        case "b":
+          e.preventDefault();
+          execCommand("bold");
+          break;
+        case "i":
+          e.preventDefault();
+          execCommand("italic");
+          break;
+        case "u":
+          e.preventDefault();
+          execCommand("underline");
+          break;
+        case "k":
           e.preventDefault();
           insertLink();
-          break;
-        case "e": // Ctrl/Cmd + E for inline code
-          e.preventDefault();
-          insertInlineCode();
-          break;
-        case "`": // Ctrl/Cmd + ` for code block
-          e.preventDefault();
-          insertCodeBlock();
-          break;
-        case "Enter": // Ctrl/Cmd + Enter for divider
-          e.preventDefault();
-          insertDivider();
           break;
         default:
           break;
@@ -78,336 +94,207 @@ const RichTextEditor = ({
     }
   };
 
-  // Modal-driven input handlers (replaces prompt())
+  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
   const [modalValue, setModalValue] = useState("");
-  const [modalExtra, setModalExtra] = useState(""); // used for alt text / language
+  const [modalExtra, setModalExtra] = useState("");
   const [modalMultiline, setModalMultiline] = useState(false);
-  const [modalConfirmAction, setModalConfirmAction] = useState(() => () => {});
+  const modalCallback = useRef(null);
 
-  const openModal = ({ title, value = "", extra = "", onConfirm }) => {
-    setModalTitle(title);
-    setModalValue(value);
-    setModalExtra(extra);
-    setModalConfirmAction(() => () => onConfirm(modalValue, modalExtra));
-    setModalOpen(true);
-  };
-
-  // Because setState is async, we provide confirm handlers that read current fields directly
   const confirmModal = () => {
+    const val = modalValue;
+    const extra = modalExtra;
     setModalOpen(false);
-    // call the stored action with latest values
-    modalConfirmAction(modalValue, modalExtra);
-  };
-
-  const cancelModal = () => {
-    setModalOpen(false);
+    setTimeout(() => {
+      if (modalCallback.current) {
+        modalCallback.current(val, extra);
+      }
+    }, 50);
   };
 
   const insertLink = () => {
+    saveSelection();
     setModalTitle("Insert Link");
     setModalValue("");
     setModalExtra("");
     setModalMultiline(false);
-    setModalConfirmAction(() => (value) => {
-      if (value && value.trim()) {
-        execCommand("createLink", value.trim());
+    modalCallback.current = (val) => {
+      if (val && val.trim()) {
+        restoreSelection();
+        document.execCommand("createLink", false, val.trim());
+        setTimeout(() => {
+          isInternalChange.current = true;
+          onChange(editorRef.current?.innerHTML || "");
+        }, 0);
       }
-    });
+    };
     setModalOpen(true);
   };
 
   const insertImage = () => {
-    // open modal to collect URL and alt text
+    saveSelection();
     setModalTitle("Insert Image");
     setModalValue("");
     setModalExtra("");
     setModalMultiline(false);
-    setModalConfirmAction(() => (value, extra) => {
-      const url = value?.trim();
-      const altText = (extra && extra.trim()) || "";
-      if (url) {
-        const img = `<div style="margin: 1.5em 0; text-align: center;"><img src="${url}" alt="${
-          altText || "Blog image"
-        }" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);" />${
-          altText
-            ? `<p style="margin-top: 0.5em; font-size: 0.875em; color: #6b7280; font-style: italic;">${altText}</p>`
-            : ""
-        }</div>`;
-        document.execCommand("insertHTML", false, img);
-        setTimeout(() => {
-          const content = editorRef.current?.innerHTML || "";
-          onChange(content);
-        }, 0);
+    modalCallback.current = (url, altText) => {
+      if (url?.trim()) {
+        const img = `<p><img src="${url.trim()}" alt="${altText || "Blog image"}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0;" /></p>`;
+        insertHTML(img);
       }
-    });
+    };
     setModalOpen(true);
   };
 
   const insertCodeBlock = () => {
-    // open modal to collect code and optional language
+    saveSelection();
     setModalTitle("Insert Code Block");
     setModalValue("");
     setModalExtra("");
     setModalMultiline(true);
-    setModalConfirmAction(() => (value, extra) => {
-      const code = value || "";
-      const language = extra || "";
+    modalCallback.current = (code, language) => {
       if (code) {
-        const languageLabel = language
-          ? `<div style="background: #e2e8f0; color: #475569; padding: 0.25em 0.75em; font-size: 0.75em; font-weight: 600; border-radius: 6px 6px 0 0; margin: 0; font-family: 'Courier New', monospace;">${language.toUpperCase()}</div>`
-          : "";
-        const codeBlock = `<div style="margin: 1.5em 0; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0;">${languageLabel}<pre style="background: #1e293b; color: #e2e8f0; padding: 1.25em; margin: 0; font-family: 'Courier New', monospace, 'SF Mono', 'Monaco', 'Inconsolata'; font-size: 14px; line-height: 1.5; overflow-x: auto;"><code>${code
+        const escapedCode = code
+          .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;")
-          .replace(/\n/g, "<br>")}</code></pre></div>`;
-        document.execCommand("insertHTML", false, codeBlock);
-        setTimeout(() => {
-          const content = editorRef.current?.innerHTML || "";
-          onChange(content);
-        }, 0);
+          .replace(/\n/g, "&#10;");
+        const langAttr = language ? ` data-language="${language}"` : "";
+        const langLabel = language ? `<div class="code-lang">${language}</div>` : "";
+        const codeBlock = `<div class="code-block"${langAttr}>${langLabel}<pre><code>${escapedCode}</code></pre></div><p><br></p>`;
+        insertHTML(codeBlock);
       }
-    });
+    };
     setModalOpen(true);
   };
 
   const insertInlineCode = () => {
     const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const selectedText = range.toString();
-
-      if (selectedText) {
-        const codeSpan = `<code style="background: #f8fafc; color: #0f172a; padding: 3px 6px; border-radius: 4px; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace; font-size: 0.875em; border: 1px solid #e2e8f0;">${selectedText}</code>`;
-        document.execCommand("insertHTML", false, codeSpan);
-      } else {
-        // open modal to collect inline code when nothing selected
-        setModalTitle("Insert Inline Code");
-        setModalValue("");
-        setModalExtra("");
-        setModalConfirmAction(() => (value) => {
-          const c = value || "";
-          if (c) {
-            const codeSpan = `<code style="background: #f8fafc; color: #0f172a; padding: 3px 6px; border-radius: 4px; font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace; font-size: 0.875em; border: 1px solid #e2e8f0;">${c}</code>`;
-            document.execCommand("insertHTML", false, codeSpan);
-            setTimeout(() => {
-              const content = editorRef.current?.innerHTML || "";
-              onChange(content);
-            }, 0);
-          }
-        });
-        setModalOpen(true);
-      }
-
+    const selectedText = selection?.toString() || "";
+    
+    if (selectedText) {
+      const codeSpan = `<code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em;">${selectedText}</code>`;
+      document.execCommand("insertHTML", false, codeSpan);
       setTimeout(() => {
-        const content = editorRef.current?.innerHTML || "";
-        onChange(content);
+        isInternalChange.current = true;
+        onChange(editorRef.current?.innerHTML || "");
       }, 0);
+    } else {
+      saveSelection();
+      setModalTitle("Insert Inline Code");
+      setModalValue("");
+      setModalExtra("");
+      setModalMultiline(false);
+      modalCallback.current = (code) => {
+        if (code) {
+          const codeSpan = `<code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em;">${code}</code>`;
+          insertHTML(codeSpan);
+        }
+      };
+      setModalOpen(true);
     }
   };
 
   const insertDivider = () => {
-    const divider = `<hr style="margin: 2em 0; border: none; height: 1px; background: linear-gradient(to right, transparent, #e2e8f0, transparent);" />`;
-    document.execCommand("insertHTML", false, divider);
+    editorRef.current?.focus();
+    document.execCommand("insertHTML", false, "<hr/>");
     setTimeout(() => {
-      const content = editorRef.current?.innerHTML || "";
-      onChange(content);
+      isInternalChange.current = true;
+      onChange(editorRef.current?.innerHTML || "");
     }, 0);
   };
 
-  const formatButtons = [
-    {
-      icon: "B",
-      command: "bold",
-      title: "Bold",
-      style: "font-bold",
-    },
-    {
-      icon: "I",
-      command: "italic",
-      title: "Italic",
-      style: "italic",
-    },
-    {
-      icon: "U",
-      command: "underline",
-      title: "Underline",
-      style: "underline",
-    },
-    {
-      icon: "H1",
-      command: "formatBlock",
-      value: "h1",
-      title: "Heading 1",
-      style: "",
-    },
-    {
-      icon: "H2",
-      command: "formatBlock",
-      value: "h2",
-      title: "Heading 2",
-      style: "",
-    },
-    {
-      icon: "H3",
-      command: "formatBlock",
-      value: "h3",
-      title: "Heading 3",
-      style: "",
-    },
-    {
-      icon: "•",
-      command: "insertUnorderedList",
-      title: "Bullet List",
-      style: "",
-    },
-    {
-      icon: "1.",
-      command: "insertOrderedList",
-      title: "Numbered List",
-      style: "",
-    },
-    {
-      icon: '""',
-      command: "formatBlock",
-      value: "blockquote",
-      title: "Quote",
-      style: "",
-    },
-    {
-      icon: "🖼️",
-      command: "custom",
-      action: insertImage,
-      title: "Insert Image",
-      style: "",
-    },
-    {
-      icon: "{ }",
-      command: "custom",
-      action: insertCodeBlock,
-      title: "Code Block (Ctrl+`)",
-      style: "font-mono",
-    },
-    {
-      icon: "`<>`",
-      command: "custom",
-      action: insertInlineCode,
-      title: "Inline Code (Ctrl+E)",
-      style: "font-mono text-xs",
-    },
-    {
-      icon: "🔗",
-      command: "custom",
-      action: insertLink,
-      title: "Insert Link (Ctrl+K)",
-      style: "",
-    },
-    {
-      icon: "—",
-      command: "custom",
-      action: insertDivider,
-      title: "Insert Divider (Ctrl+Enter)",
-      style: "",
-    },
-  ];
+  const ToolbarButton = ({ icon, title, onClick, active, style = "" }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:bg-white hover:shadow-sm transition-all ${style} ${active ? 'bg-blue-100 border-blue-400' : 'bg-gray-50'}`}
+      title={title}
+    >
+      {icon}
+    </button>
+  );
 
   return (
     <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
-      {/* Modal for collecting user input (replaces prompt/alert) */}
-      <Modal
-        isOpen={modalOpen}
-        title={modalTitle}
-        onClose={cancelModal}
-        onConfirm={confirmModal}
-        confirmLabel="Insert"
-        cancelLabel="Cancel"
-      >
-        <div className="flex flex-col gap-2">
-          <label className="text-sm text-gray-700">Value</label>
-          {modalMultiline ? (
-            <textarea
-              autoFocus
-              value={modalValue}
-              onChange={(e) => setModalValue(e.target.value)}
-              rows={8}
-              className="w-full border px-3 py-2 rounded-md font-mono text-sm"
-            />
-          ) : (
-            <input
-              autoFocus
-              value={modalValue}
-              onChange={(e) => setModalValue(e.target.value)}
-              className="w-full border px-3 py-2 rounded-md"
-            />
-          )}
-          {/* Extra field (alt text, language, etc.) */}
-          <label className="text-sm text-gray-700">Extra (optional)</label>
-          <input
-            value={modalExtra}
-            onChange={(e) => setModalExtra(e.target.value)}
-            className="w-full border px-3 py-2 rounded-md"
-          />
-          <p className="text-xs text-gray-500">
-            Use the top field for main input (URL/code). Use Extra for alt text
-            or language when relevant.
-          </p>
+      <Modal isOpen={modalOpen} title={modalTitle} onClose={() => setModalOpen(false)} onConfirm={confirmModal} confirmLabel="Insert" cancelLabel="Cancel">
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1">
+              {modalTitle.includes("Image") ? "Image URL" : modalTitle.includes("Link") ? "Link URL" : "Value"}
+            </label>
+            {modalMultiline ? (
+              <textarea autoFocus value={modalValue} onChange={(e) => setModalValue(e.target.value)} rows={8} className="w-full border border-gray-300 px-3 py-2 rounded-md font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your code here..." />
+            ) : (
+              <input autoFocus value={modalValue} onChange={(e) => setModalValue(e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder={modalTitle.includes("Image") ? "https://example.com/image.jpg" : "https://example.com"} />
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1">
+              {modalTitle.includes("Image") ? "Alt Text (optional)" : modalTitle.includes("Code Block") ? "Language (optional)" : "Extra (optional)"}
+            </label>
+            <input value={modalExtra} onChange={(e) => setModalExtra(e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder={modalTitle.includes("Image") ? "Describe the image" : "javascript, python, etc."} />
+          </div>
         </div>
       </Modal>
-      {/* Toolbar */}
-      <div className="border-b border-gray-200 p-3 bg-gray-50">
-        <div className="flex flex-wrap gap-2">
-          {formatButtons.map((button, index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => {
-                if (button.command === "custom" && button.action) {
-                  button.action();
-                } else {
-                  execCommand(button.command, button.value);
-                }
-              }}
-              className={`
-                px-3 py-1 text-sm border border-gray-300 rounded-md
-                hover:bg-white hover:shadow-sm transition-all
-                ${button.style}
-              `}
-              title={button.title}
-            >
-              {button.icon}
-            </button>
-          ))}
 
-          <div className="w-px bg-gray-300 mx-1"></div>
+      {/* Sticky Toolbar */}
+      <div className="sticky top-0 z-10 border-b border-gray-200 p-2 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-1">
+          {/* Text Formatting */}
+          <div className="flex gap-1 pr-2 border-r border-gray-300">
+            <ToolbarButton icon="B" title="Bold (Ctrl+B)" onClick={() => execCommand("bold")} style="font-bold" />
+            <ToolbarButton icon="I" title="Italic (Ctrl+I)" onClick={() => execCommand("italic")} style="italic" />
+            <ToolbarButton icon="U" title="Underline (Ctrl+U)" onClick={() => execCommand("underline")} style="underline" />
+            <ToolbarButton icon="S" title="Strikethrough" onClick={() => execCommand("strikeThrough")} style="line-through" />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => execCommand("removeFormat")}
-            className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-white hover:shadow-sm transition-all"
-            title="Clear Formatting"
-          >
-            ✕
-          </button>
+          {/* Headings */}
+          <div className="flex gap-1 px-2 border-r border-gray-300">
+            <ToolbarButton icon="H1" title="Heading 1" onClick={() => execCommand("formatBlock", "h1")} />
+            <ToolbarButton icon="H2" title="Heading 2" onClick={() => execCommand("formatBlock", "h2")} />
+            <ToolbarButton icon="H3" title="Heading 3" onClick={() => execCommand("formatBlock", "h3")} />
+            <ToolbarButton icon="¶" title="Paragraph" onClick={() => execCommand("formatBlock", "p")} />
+          </div>
+
+          {/* Lists */}
+          <div className="flex gap-1 px-2 border-r border-gray-300">
+            <ToolbarButton icon="• List" title="Bullet List" onClick={() => execCommand("insertUnorderedList")} />
+            <ToolbarButton icon="1. List" title="Numbered List" onClick={() => execCommand("insertOrderedList")} />
+            <ToolbarButton icon="❝" title="Blockquote" onClick={() => execCommand("formatBlock", "blockquote")} />
+          </div>
+
+          {/* Insert */}
+          <div className="flex gap-1 px-2 border-r border-gray-300">
+            <ToolbarButton icon="🔗" title="Insert Link (Ctrl+K)" onClick={insertLink} />
+            <ToolbarButton icon="🖼️" title="Insert Image" onClick={insertImage} />
+            <ToolbarButton icon="—" title="Horizontal Line" onClick={insertDivider} />
+          </div>
+
+          {/* Code */}
+          <div className="flex gap-1 px-2 border-r border-gray-300">
+            <ToolbarButton icon="<>" title="Inline Code" onClick={insertInlineCode} style="font-mono text-xs" />
+            <ToolbarButton icon="{...}" title="Code Block" onClick={insertCodeBlock} style="font-mono text-xs" />
+          </div>
+
+          {/* Clear */}
+          <div className="flex gap-1 pl-2">
+            <ToolbarButton icon="✕" title="Clear Formatting" onClick={() => execCommand("removeFormat")} />
+          </div>
         </div>
       </div>
 
-      {/* Editor */}
+      {/* Editor Area */}
       <div
         ref={editorRef}
         contentEditable
         onInput={handleInput}
-        onMouseUp={handleSelection}
-        onKeyUp={handleSelection}
         onKeyDown={handleKeyDown}
-        className="min-h-[400px] p-4 focus:outline-none prose prose-sm max-w-none"
-        style={{
-          minHeight: "400px",
-          lineHeight: "1.6",
-        }}
-        dangerouslySetInnerHTML={{ __html: value }}
-        suppressContentEditableWarning={true}
+        className="min-h-[500px] p-6 focus:outline-none"
+        style={{ minHeight: "500px", lineHeight: "1.8" }}
         data-placeholder={placeholder}
+        suppressContentEditableWarning={true}
       />
 
       <style>{`
@@ -416,49 +303,139 @@ const RichTextEditor = ({
           color: #9CA3AF;
           font-style: italic;
         }
-        
+        [contenteditable] {
+          font-size: 16px;
+          color: #1f2937;
+        }
         [contenteditable] h1 {
           font-size: 2em;
-          font-weight: bold;
-          margin: 0.67em 0;
+          font-weight: 700;
+          margin: 1em 0 0.5em 0;
+          color: #111827;
+          line-height: 1.3;
         }
-        
         [contenteditable] h2 {
           font-size: 1.5em;
-          font-weight: bold;
-          margin: 0.83em 0;
+          font-weight: 600;
+          margin: 1em 0 0.5em 0;
+          color: #1f2937;
+          line-height: 1.4;
         }
-        
         [contenteditable] h3 {
-          font-size: 1.17em;
-          font-weight: bold;
-          margin: 1em 0;
+          font-size: 1.25em;
+          font-weight: 600;
+          margin: 1em 0 0.5em 0;
+          color: #374151;
+          line-height: 1.4;
         }
-        
-        [contenteditable] blockquote {
-          margin: 1em 0;
-          padding-left: 1em;
-          border-left: 4px solid #e5e7eb;
-          color: #6b7280;
-          font-style: italic;
+        [contenteditable] p {
+          margin: 0.75em 0;
+          line-height: 1.8;
         }
-        
-        [contenteditable] ul, [contenteditable] ol {
+        [contenteditable] ul {
+          list-style-type: disc;
           margin: 1em 0;
           padding-left: 2em;
         }
-        
-        [contenteditable] p {
+        [contenteditable] ol {
+          list-style-type: decimal;
+          margin: 1em 0;
+          padding-left: 2em;
+        }
+        [contenteditable] li {
           margin: 0.5em 0;
+          line-height: 1.7;
+        }
+        [contenteditable] blockquote {
+          margin: 1.5em 0;
+          padding: 1em 1.5em;
+          border-left: 4px solid #3b82f6;
+          background: #f8fafc;
+          color: #475569;
+          font-style: italic;
+          border-radius: 0 8px 8px 0;
+        }
+        [contenteditable] a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        [contenteditable] hr {
+          margin: 2em 0;
+          border: none;
+          height: 1px;
+          background: #e5e7eb;
+        }
+        [contenteditable] img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 8px;
+          margin: 1em 0;
+        }
+        [contenteditable] code {
+          background: #f1f5f9;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+          font-size: 0.9em;
+          color: #e11d48;
+        }
+        [contenteditable] .code-block {
+          margin: 1.5em 0;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1px solid #334155;
+          background: #0f172a;
+        }
+        [contenteditable] .code-block .code-lang {
+          background: #1e293b;
+          color: #94a3b8;
+          padding: 0.5em 1em;
+          font-size: 0.75em;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border-bottom: 1px solid #334155;
+        }
+        [contenteditable] .code-block pre {
+          background: #0f172a;
+          color: #e2e8f0;
+          padding: 1em 1.25em;
+          margin: 0;
+          font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+          font-size: 0.875em;
+          line-height: 1.7;
+          overflow-x: auto;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        }
+        [contenteditable] .code-block pre code {
+          background: transparent;
+          padding: 0;
+          color: inherit;
+          font-size: inherit;
+        }
+        [contenteditable] pre {
+          background: #0f172a;
+          color: #e2e8f0;
+          padding: 1em;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 1em 0;
+          font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+          font-size: 0.875em;
+          line-height: 1.7;
+        }
+        [contenteditable] pre code {
+          background: transparent;
+          padding: 0;
+          color: inherit;
         }
       `}</style>
 
-      {/* Word Count */}
+      {/* Footer */}
       <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 text-sm text-gray-600 flex justify-between items-center">
         <span>{wordCount} words</span>
-        <span className="text-xs text-gray-500">
-          {Math.ceil(wordCount / 200)} min read
-        </span>
+        <span className="text-xs text-gray-500">~{Math.ceil(wordCount / 200)} min read</span>
       </div>
     </div>
   );
